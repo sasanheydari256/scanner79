@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, PermissionsAndroid, SafeAreaView, ActivityIndicator, Image, BackHandler, Animated, Pressable, TouchableOpacity } from 'react-native';
-import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
+import { Camera, useCameraDevice, useCameraPermission, useCodeScanner } from 'react-native-vision-camera';
 import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import { SCREEN_HEIGHT, SCREEN_WIDTH } from '../../constants/Screen';
 import { AccessOrDeniedEvent, DownloadEBadge } from '../../constants/api';
 import Footer from './footer';
 import WebView from 'react-native-webview';
 import { styles } from './styles';
+import PermissionsPage from './PermissionsPage';
+import NoCameraDeviceError from './NoCameraDeviceError';
 import { userLogout } from '@app/redux/actions';
 import { useDispatch } from 'react-redux';
 import { checkInternetStatus } from './checkInternetStatus';
@@ -17,14 +19,13 @@ const Scanner = (props) => {
     const webViewRef = useRef(null);
     const pdfUrlRef = useRef("");
     const scanningRef = useRef(false);
+    const { hasPermission } = useCameraPermission()
 
     const { hallName, eventId, Print, EventName, StartDate } = props.route.params.item || 'null';
 
 
     const isTablet = Dimensions.get('window').width >= 768;
     const camera = useRef(null);
-    const [hasPermission, setHasPermission] = useState(false);
-    const [isCameraActive, setIsCameraActive] = useState(true);
     const [data, setData] = useState([]);
     const [scanning, setScanning] = useState(false); // برای کنترل وضعیت اسکن
     const [loading, setLoading] = useState(true);
@@ -44,9 +45,9 @@ const Scanner = (props) => {
 
     const [torchEnabled, setTorchEnabled] = useState(false);
     const translateY = useRef(new Animated.Value(0)).current; // مقدار اولیه پایین صفحه
-    const onLogoutPress = () => {
-        dispatch(userLogout());
-    };
+    // const onLogoutPress = () => {
+    //     dispatch(userLogout());
+    // };
 
     const showViewPrint = () => {
         Animated.timing(translateY, {
@@ -63,79 +64,7 @@ const Scanner = (props) => {
         }).start();
     };
 
-    useEffect(() => {
-        const requestCameraPermission = async () => {
-            try {
-                if (Platform.OS === 'android') {
-                    // Request Camera Permission for Android
-                    const granted = await PermissionsAndroid.request(
-                        PermissionsAndroid.PERMISSIONS.CAMERA,
-                        {
-                            title: 'Camera Permission',
-                            message: 'This app needs access to your camera to take pictures.',
-                            buttonPositive: 'OK',
-                        }
-                    );
-                    if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-                        console.log('Camera permission granted for Android');
-                        resetCamera()
-                        setHasPermission(true);
-                        // setTorchEnabled(false); // Enable torch after permission is granted
-                        setIsCameraActive(true); // Enable torch after permission is granted
-                    } else {
-                        console.warn('Camera permission denied for Android');
-                    }
-                } else {
-                    // Request Camera Permission for iOS
-                    const permission = await request(PERMISSIONS.IOS.CAMERA);
-                    if (permission === RESULTS.GRANTED) {
-                        console.log('Camera permission granted for iOS');
-                        resetCamera()
-                        setHasPermission(true);
-                        // setTorchEnabled(false); // 
-                        setIsCameraActive(true); // Enable torch after permission is granted
-                    } else {
-                        console.warn('Camera permission denied for iOS');
-                    }
-                }
-            } catch (error) {
-                console.error('Error requesting camera permission:', error);
-            }
-        };
 
-        const checkCameraPermission = async () => {
-            try {
-                if (Platform.OS === 'android') {
-                    const granted = await PermissionsAndroid.check(
-                        PermissionsAndroid.PERMISSIONS.CAMERA
-                    );
-                    if (granted) {
-                        console.log('Camera permission already granted for Android');
-
-                        // setTorchEnabled(false); // Enable torch if permission is already granted
-                        resetCamera()
-                        setHasPermission(true);
-                    } else {
-                        await requestCameraPermission();
-                    }
-                } else {
-                    const result = await check(PERMISSIONS.IOS.CAMERA);
-                    if (result === RESULTS.GRANTED) {
-                        console.log('Camera permission already granted for iOS');
-                        setHasPermission(true);
-                        resetCamera()
-                        // setTorchEnabled(false); // Enable torch if permission is already granted
-                    } else {
-                        await requestCameraPermission();
-                    }
-                }
-            } catch (error) {
-                console.error('Error checking camera permission:', error);
-            }
-        };
-
-        checkCameraPermission();
-    }, []);
     const removeDoubleQuotes = (value) => {
         if (typeof value === 'string') {
             return value.replace(/"/g, ''); // حذف همه دابل کوتیشن‌ها
@@ -247,14 +176,21 @@ const Scanner = (props) => {
             hallName,
             savedAt: new Date().toISOString(), // می‌تونی زمان ذخیره رو هم ذخیره کنی
         };
+        playAudio();
         dispatch(addOfflineData(dataToSave));
+        setCheckIn(true)
+        setErrorText('')
         setTimeout(() => {
-            setScanning(false);
-        }, 2000);
+            setIsSucsessScan(false)
+        }, 1000);
+        setTimeout(() => {
+            setScanning(false); // فعال کردن دوباره اسکنر پس از 2 ثانیه
+        }, 2500);
+    
     };
-    const clearOffline = () => {
-        dispatch(clearOfflineData());
-    };
+    // const clearOffline = () => {
+    //     dispatch(clearOfflineData());
+    // };
     const codeScanner = useCodeScanner({
         codeTypes: ['qr', 'ean-13'],
         onCodeScanned: (codes) => {
@@ -270,12 +206,11 @@ const Scanner = (props) => {
                     const cleanedHallName = removeDoubleQuotes(hallName);
                     setScanning(true)
                     setIsSucsessScan(true)
-                    setRegistrationId(codes[0].value)
+                    // setRegistrationId(codes[0].value)
                     if (status === 'online') {
                         getDataApi(cleanedRegId, cleanedEventId, cleanedHallName)
                     } else {
                         saveOfflineData(cleanedRegId, cleanedEventId, cleanedHallName)
-
                     }
                 }
 
@@ -288,16 +223,6 @@ const Scanner = (props) => {
         }
     });
 
-    const resetCamera = async () => {
-        if (camera.current) {
-            try {
-                setCameraKey((prevKey) => prevKey + 1);
-                console.log('Camera reset successfully.');
-            } catch (error) {
-                console.error('Error resetting camera:', error);
-            }
-        }
-    };
     useEffect(() => {
         const backHandler = BackHandler.addEventListener(
             "hardwareBackPress",
@@ -399,9 +324,14 @@ const Scanner = (props) => {
     const formattedDate = conferenceDate.toLocaleDateString('en-GB', options);
     const [status, setStatus] = useState('offline'); // offline | online | poor_signal
     const [connectionType, setConnectionType] = useState(null); // wifi | cellular | none | unknown
+    const [mode, setMode] = useState('auto');
 
     useEffect(() => {
-        // دریافت اولیه وضعیت اینترنت
+        if (mode === 'manual') {
+            setStatus('offline')
+            return; // در حالت دستی هیچ‌کاری انجام نمی‌دهیم
+        }
+
         const fetchStatus = async () => {
             const currentStatus = await checkInternetStatus();
             setStatus(currentStatus);
@@ -412,7 +342,6 @@ const Scanner = (props) => {
 
         fetchStatus();
 
-        // شنود تغییرات اتصال
         const unsubscribe = NetInfo.addEventListener(async (state) => {
             setConnectionType(state.type);
 
@@ -435,23 +364,10 @@ const Scanner = (props) => {
         return () => {
             unsubscribe();
         };
-    }, []);
+    }, [mode]);
 
-    useEffect(() => {
-        if (hasPermission) {
-            const interval = setInterval(async () => {
-                if (device) {
-                    console.log('Camera reset successfully.');
-                    const devices = await Camera.getAvailableCameraDevices();
-                    setCameraKey((prevKey) => prevKey + 1);
-                    console.log(device);
 
-                    clearInterval(interval);
-                }
-            }, 1100);
-            return () => clearInterval(interval);
-        }
-    }, [hasPermission, device]);
+
     useEffect(() => {
         if (device) {
             console.log('Camera device ready:', device.name);
@@ -459,6 +375,12 @@ const Scanner = (props) => {
             console.log('Camera device is null');
         }
     }, [device]);
+
+    if (!hasPermission) return <PermissionsPage />
+    if (device == null) return <NoCameraDeviceError onRetry={() => {
+        setCameraKey((prevKey) => prevKey + 1);
+
+    }} />
     return (
         <SafeAreaView style={{
             flex: 1, backgroundColor: '#fff',
@@ -543,7 +465,7 @@ const Scanner = (props) => {
                     height: isTablet ? SCREEN_HEIGHT * 0.65 : SCREEN_HEIGHT * 0.5,
                 }}>
                     {
-                        hasPermission && isCameraActive && device ? (
+                        hasPermission && device ? (
                             <Camera
                                 key={cameraKey}
                                 ref={camera}
@@ -661,6 +583,8 @@ const Scanner = (props) => {
             <Footer
                 status={status}
                 connectionType={connectionType}
+                mode={mode}
+                setMode={setMode}
                 {...props} onPressLogout={() => {
                     // setHasPermission(false);
                     // setIsCameraActive(true);
@@ -678,7 +602,9 @@ const Scanner = (props) => {
                     // setTorchEnabled(false);
                     // onLogoutPress()
 
-                }} />
+                }}
+
+            />
 
             <WebView ref={webViewRef} originWhitelist={["*"]}
                 source={{ uri: pdfUrlRef.current }} // مستقیماً URL را بارگذاری کنید

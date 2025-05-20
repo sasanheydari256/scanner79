@@ -31,6 +31,7 @@ import {
 import Login, { retrieveData } from '@app/screens/Login/index';
 import LoginByQRCode from '@app/screens/LoginByQRCode';
 import Scanner from '@app/screens/Scanner';
+import Splash from '@app/screens/Splash';
 
 
 // Shared components and props
@@ -136,13 +137,16 @@ const CurrentNavigator = (): React.JSX.Element => {
   }
   return (
     <Navigator
-      initialRouteName="Scan"
+      initialRouteName="Splash"
       screenOptions={{
         headerShown: false,
         swipeEnabled: false,
         swipeEdgeWidth: 0,
 
       }}>
+      <Screen name="Splash" component={Splash}
+     
+      />
       <Screen name="Scan" component={Scanner}
         initialParams={{
           item: {

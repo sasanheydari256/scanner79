@@ -6,11 +6,44 @@ import {
     Animated,
     Easing,
     Text,
+    ScrollView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Feather';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { SCREEN_WIDTH } from '../../constants/Screen';
 import CustomButton from './CustomButton'
-const Footer = ({ status, connectionType }) => {
+import { useSelector, useDispatch } from 'react-redux';
+import { clearOfflineData } from '../../redux/reducers/offlineDataSlice';
+import { SyncDataScan } from '../../constants/api';
+import { userLogout } from '@app/redux/actions';
+
+const Footer = ({ status, connectionType, mode, setMode }) => {
+    const dispatch = useDispatch();
+    const [loading, setLoading] = useState(false);
+    const onLogoutPress = () => {
+        dispatch(userLogout());
+    };
+    const offlineData = useSelector(
+        (state) => state.offlineData.data ?? {},
+    );
+    const transformOfflineData = (dataArray) => {
+        if (!Array.isArray(dataArray) || dataArray.length === 0) return null;
+
+        const { eventId, hallName } = dataArray[0]; // فرض بر این است که eventId و hallName برای همه رکوردها یکی است
+
+        const Users = dataArray.map((item) => ({
+            RegId: item.regId,
+            Data: item.savedAt.replace('T', ' ').replace('Z', ''),
+        }));
+
+        return {
+            EventId: eventId,
+            HallName: hallName,
+            Users,
+        };
+    };
+
+    const payload = transformOfflineData(offlineData);
+    // console.log(payload);
     const [expanded, setExpanded] = useState(false);
     const animation = useRef(new Animated.Value(0)).current;
 
@@ -35,7 +68,17 @@ const Footer = ({ status, connectionType }) => {
         inputRange: [0, 1],
         outputRange: ['#f8f8f8', '#444'],
     });
+    const clearOffline = () => {
+        dispatch(clearOfflineData());
+    };
+    const sendDataApi = async (data) => {
+        setLoading(true)
+        const api = await SyncDataScan(data.EventId, data.HallName, data.Users)
+        // console.log(api);
 
+        clearOffline()
+        setLoading(false)
+    }
     return (
         <Animated.View style={[styles.container, {
             height: heightInterpolate,
@@ -47,8 +90,8 @@ const Footer = ({ status, connectionType }) => {
 
             {expanded && (
                 <View style={styles.contentWrapper}>
-                    <InfoRow icon="cloud" label="Status" value={status} />
-                    <InfoRow icon="wifi" label="Connection" value={connectionType} />
+                    <InfoRow icon="globe-outline" label="Status" value={status} />
+                    <InfoRow icon="swap-vertical-outline" label="Connection" value={connectionType} />
                     <InfoRow
                         icon="bar-chart"
                         label="Signal"
@@ -61,11 +104,30 @@ const Footer = ({ status, connectionType }) => {
                 </View>
             )}
             {expanded && (
-                <View style={{ width: '90%', alignSelf: 'center' ,paddingTop: '2%' }}>
+                <ScrollView style={{ width: '90%', alignSelf: 'center', paddingTop: '2%' }}>
 
-                    <CustomButton iconName={'sync'} buttonText={'Sync Now'} />
+                    <CustomButton
+                        loading={loading}
+                        badgeCount={offlineData.length}
+                        disabled={offlineData.length === 0}
+                        onPress={() => {
 
-                </View>
+                            sendDataApi(payload)
+                        }}
+                        iconName={'sync'} buttonText={'Sync Now'} />
+                    <CustomButton
+                        iconName={mode !== 'auto' ? 'change-circle' : 'mobiledata-off'}
+                        onPress={() => setMode(prev => (prev === 'auto' ? 'manual' : 'auto'))}
+                        buttonText={mode === 'auto' ? 'Switch to Manual' : 'Switch to Auto'} />
+                    <CustomButton
+                        onPress={() => {
+                            clearOffline()
+
+                            onLogoutPress()
+                        }}
+                        iconName={'logout'} buttonText={'Logout'} />
+
+                </ScrollView>
             )}
         </Animated.View>
     );
@@ -116,7 +178,7 @@ const styles = StyleSheet.create({
     infoRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 6,
+        paddingVertical: 3,
         paddingHorizontal: 8,
         justifyContent: 'space-between',
     },
@@ -127,7 +189,7 @@ const styles = StyleSheet.create({
     },
 
     labelWrapper: {
-        width: '30%', // یا '30%' برای تطبیق‌پذیری
+        width: '30%', // 
         justifyContent: 'flex-start',
     },
 

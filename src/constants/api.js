@@ -177,3 +177,38 @@ export const DownloadEBadge = async (EventId , RegId) => {
     return null;
   }
 }
+export const SyncDataScan = async (EventId , HallName, Users) => {  
+  try {
+    const response = await requestV2(
+      'POST',
+      'SyncDataScan',
+      {
+        'EventId': EventId,
+        'HallName': HallName,
+        'Users': Users,
+      },
+      () => { },
+      (response) => {
+        // console.log('Success Callback:', response)
+      },
+      async (result) => {
+        // console.log('Result:', result)
+      },
+      (err) => {
+        // console.error('Error Callback:', err)
+      }
+    );
+    return response;
+    // if (response && response.Result === 'Success') {
+    //   // console.log(response);
+
+    //   return response;
+    // } else {
+    //   // console.error('Request returned no result: api Screen AccessOrDeniedEvent1', response);
+    //   return response;
+    // }
+  } catch (err) {
+    console.error('Request failed with error: api Screen SyncDataScan', err);
+    return null;
+  }
+}
